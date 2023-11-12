@@ -1,0 +1,15 @@
+[package]
+name = "pmrs"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+bus = "2.4.1"
+clap = { version = "4.4.8", features = ["derive"] }
+parking_lot = "0.12.1"
+serde = { version = "1.0.192", features = ["derive"] }
+sysinfo = "0.29.10"
+toml = "0.8.8"
+flack = { version = "*", path = "include/flack" }

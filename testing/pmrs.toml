@@ -1,0 +1,20 @@
+[envs]
+global_foo = "bar"
+global_env = "staging"
+
+[services]
+
+# [services.fails]
+# path = "testing/fails/target/release/fails"
+# max_restarts = 3
+
+# [services.fails2]
+# path = "testing/fails/target/release/fails"
+
+# [services.envs]
+# path = "testing/envs/target/release/envs"
+# envs = { "PMRSONE" = "WOO! IT WORKED!", "PMRS TWO" = "the space worked! 🥺" }
+# wd = "logs"
+
+[services."Deno web server test"]
+path = "testing/deno-web/deno-web"
