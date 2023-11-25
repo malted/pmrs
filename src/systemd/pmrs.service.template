@@ -1,0 +1,9 @@
+[Unit]
+Description=PMRS Process Manager
+
+[Service]
+Type=simple
+ExecStart=/bin/bash /usr/bin/pmrs start
+
+[Install]
+WantedBy=multi-user.target

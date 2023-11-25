@@ -4,7 +4,6 @@ pub mod cli;
 pub mod services;
 
 pub const DEFAULT_CONFIG_PATH: &str = "./testing/pmrs.toml";
-pub const DEFAULT_MAX_RESTARTS: usize = 5;
 
 #[macro_export]
 macro_rules! function_name {
@@ -15,5 +14,5 @@ macro_rules! function_name {
         }
         let name = type_name_of(f);
         name.strip_suffix("::f").unwrap()
-    }}
+    }};
 }

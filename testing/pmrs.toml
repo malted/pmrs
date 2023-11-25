@@ -16,5 +16,11 @@ global_env = "staging"
 # envs = { "PMRSONE" = "WOO! IT WORKED!", "PMRS TWO" = "the space worked! 🥺" }
 # wd = "logs"
 
-[services."Deno web server test"]
-path = "testing/deno-web/deno-web"
+[services."Deno panic test 001"]
+path = "testing/deno-bins/deno-bins"
+envs = { "PORT" = "3005" }
+
+[services."Deno panic test 002"]
+path = "testing/deno-bins/fail"
+expo_backoff = true
+restart_delay = 5
