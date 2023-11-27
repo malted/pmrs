@@ -1,23 +1,30 @@
-use bus::Bus;
 use clap::Parser;
 use color_print::{cprint, cprintln};
 use flack::lock_file;
-use parking_lot::Mutex;
-use pmrs::services::{spawn_service, Service, ServiceRepr};
-use std::fs::OpenOptions;
-use std::io::prelude::*;
-use std::os::unix::net::UnixListener;
-use std::path::Path;
+use parking_lot::{Mutex, RwLock};
+use pmrs::services::{spawn_service, Service};
+use rocket::tokio::{
+    self, task,
+    time::{sleep, Duration},
+};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::{
-    fs::File,
+    fs::{File, OpenOptions},
     io::{BufRead, BufReader, Read, Write},
+    os::unix::net::UnixListener,
+    path::Path,
     process::Child,
     sync::Arc,
 };
 use sysinfo::{System, SystemExt};
 use toml::Table;
 
-fn main() -> Result<(), Box<dyn std::error::Error + 'static>> {
+#[rocket::main]
+async fn main() -> Result<(), Box<dyn std::error::Error + 'static>> {
+    // Setup signal handling
+    // let mut sigint = signal(SignalKind::interrupt()).expect("Failed to setup SIGINT handler");
+    // let mut sigterm = signal(SignalKind::terminate()).expect("Failed to setup SIGTERM handler");
+
     let config_file = File::open(pmrs::DEFAULT_CONFIG_PATH)?;
 
     let cli = pmrs::cli::Cli::parse();
@@ -42,69 +49,52 @@ fn start(mut config_file: File) -> Result<(), Box<dyn std::error::Error + 'stati
     config_file.read_to_end(&mut config_file_buffer)?;
     let config: Table = String::from_utf8_lossy(&config_file_buffer).parse()?;
 
-    let services = Service::from_toml(config);
+    // let services: Vec<RwLock<Service>> = Service::from_toml(config)
+    //     .into_iter()
+    //     .map(RwLock::new)
+    //     .collect();
+    let services: Arc<Vec<Arc<RwLock<Service>>>> = Arc::new(
+        Service::from_toml(config)
+            .into_iter()
+            .map(|s| Arc::new(RwLock::new(s)))
+            .collect(),
+    );
 
-    let bus = Arc::new(Mutex::new(Bus::new(100)));
+    let highest_id = services.iter().map(|s| s.read().id).max().unwrap_or(0);
+    let services_killed = Arc::new(Mutex::new(vec![false; highest_id + 1])); // Maybe this should be a hashmap to avoid zombie IDs?
 
     // (process reference, init count)
-    let mut children: Vec<ServiceRepr> = services
-        .iter()
-        .map(|s| {
-            cprintln!("<green>Starting</> <blue, bold>{}</>", s.name.clone());
-            (
-                spawn_service(&s, bus.clone(), s.id, 0).expect("failed to spawn"),
-                0,
-            )
-        })
-        .collect::<Vec<ServiceRepr>>();
+    for service in services.iter() {
+        cprintln!("<green>Starting</> <blue, bold>{}</>", service.read().name);
 
-    let mut rx_web = bus.clone().lock().add_rx();
-    let children_web = children.clone();
-    let services_web = services.clone();
-    std::thread::spawn(move || {
-        while let Ok(id) = rx_web.recv() {
+        let service_clone = service.clone();
+        let sk_clone = services_killed.clone();
+        std::thread::spawn(move || spawn_service(service_clone, sk_clone));
+    }
 
-            // let mut file = fs::OpenOptions::new().create(true).append(true).open(format!("logs/{}.log", &services_web[id].name)).expect("failed to open log file");
-            // file.write_all(format!("Process with id {} failed\n", id).as_bytes()).expect("failed to write to log file");
-        }
+    rocket::tokio::spawn(async move {
+        pmrs::web::rocket(services.clone())
+            .await
+            .expect("run web dashboard.")
     });
 
-    let mut rxx = bus.clone().lock().add_rx();
-    std::thread::spawn(move || {
-        while let Ok(id) = rxx.recv() {
-            cprint!(
-                "<red>Failure #{}: </><blue,bold>{}</> (id <yellow>{id}</>)",
-                children[id].1 + 1,
-                services[id].name,
-            );
-
-            // Check if the process has failed too many times
-            if children[id].1 >= services[id].max_restarts {
-                cprintln!(
-                    " | <cyan>It will not be restarted automatically because the max retry count is {}</>",
-                    services[id].max_restarts
-                );
-                continue;
+    let ctrlc_sk = services_killed.clone();
+    ctrlc::set_handler(move || {
+        cprintln!("\n<red>Stopping</> <blue, bold>pmrs</>");
+        pmrs::RUNNING.store(false, Ordering::SeqCst);
+        // Wait until all services are killed.
+        // If the below panic occurs, it means the service was not killed, or there is a zombie ID.
+        let mut i = 0;
+        while ctrlc_sk.lock().iter().any(|&x| x == false) {
+            std::thread::sleep(std::time::Duration::from_millis(100));
+            i += 1;
+            if i > 100 {
+                panic!("Failed to stop all services in 5 seconds. Please file a bug!");
             }
-
-            let delay = if services[id].expo_backoff {
-                2u64.pow(children[id].1 as u32) + services[id].restart_delay
-            } else {
-                services[id].restart_delay
-            };
-
-            if delay > 0 {
-                cprintln!(" | <cyan>Restarting in {} seconds</>", delay);
-            } else {
-                cprintln!(" | <cyan>Restarting immediately</>");
-            }
-
-            children[id] = (
-                spawn_service(&services[id], bus.clone(), id, delay).unwrap(),
-                children[id].1 + 1,
-            );
         }
-    });
+        std::process::exit(0);
+    })
+    .expect("Error setting Ctrl-C handler");
 
     loop {}
 

@@ -2,6 +2,12 @@
 
 pub mod cli;
 pub mod services;
+pub mod web;
+use std::sync::{atomic::AtomicBool, Arc};
+
+lazy_static::lazy_static! {
+    pub static ref RUNNING: Arc<AtomicBool> = Arc::new(AtomicBool::new(true));
+}
 
 pub const DEFAULT_CONFIG_PATH: &str = "./testing/pmrs.toml";
 

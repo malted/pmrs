@@ -18,9 +18,10 @@ global_env = "staging"
 
 [services."Deno panic test 001"]
 path = "testing/deno-bins/deno-bins"
-envs = { "PORT" = "3005" }
+envs = { "PORT" = "3006" }
+restart_on_success = true
 
 [services."Deno panic test 002"]
 path = "testing/deno-bins/fail"
-expo_backoff = true
-restart_delay = 5
+expo_backoff = false
+max_restarts = 3

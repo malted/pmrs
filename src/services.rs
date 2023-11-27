@@ -1,7 +1,13 @@
-use color_print::{cprint, cprintln};
+use crate::RUNNING;
+use bus::Bus;
+use color_print::{cformat, cprint, cprintln};
+use parking_lot::{Mutex, RwLock};
 use serde::Deserialize;
 use std::env;
 use std::path::PathBuf;
+use std::process::{Child, Command, Stdio};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 use toml::Table;
 
 #[derive(Deserialize, Debug, Clone)]
@@ -13,8 +19,12 @@ pub struct Service {
     pub envs: Vec<(String, String)>, // A list of kv environment variables to pass to the executable file.
     pub wd: PathBuf, // A path to the working directory from which the executable file should be run.
     pub max_restarts: usize, // The maximum number of times the service can be restarted before pmrs gives up on it. usize::MAX by default.
-    pub restart_delay: u64, // The number of seconds to wait before restarting the service. 0 by default.
+    pub restart_on_success: bool, // Whether or not to restart the service when it exits successfully.
     pub expo_backoff: bool, // Whether or not to use exponential backoff when restarting the service.
+
+                            // Nonconfigurables
+                            // pub child: Option<Child>,
+                            // pub running: Arc<AtomicBool>,
 }
 impl Service {
     pub fn from_toml(config: Table) -> Vec<Self> {
@@ -116,11 +126,11 @@ impl Into<Service> for ServiceEntry<'_> {
                         as usize
                 })
                 .unwrap_or(usize::MAX),
-            restart_delay: self
+            restart_on_success: self
                 .1
-                .get("restart_delay")
-                .map(|i| i.as_integer().expect("the restart delay to be an integer") as u64)
-                .unwrap_or(0),
+                .get("restart_on_success")
+                .map(|i| i.as_bool().expect("a bool"))
+                .unwrap_or(true),
             expo_backoff: self
                 .1
                 .get("expo_backoff")
@@ -130,56 +140,89 @@ impl Into<Service> for ServiceEntry<'_> {
     }
 }
 
-use bus::Bus;
-use parking_lot::Mutex;
-use std::process::{Child, Command, Stdio};
-use std::sync::Arc;
-
 // Spawns a program
 // Funnels its stdout and stderr to a log file
 // If it fails, broadcasts to a Bus
 // Returns a handle to the process
 
 pub fn spawn_service(
-    service: &Service,
-    fail_tx: Arc<Mutex<Bus<usize>>>,
-    id: usize,
-    delay: u64,
-) -> std::io::Result<Arc<Mutex<Child>>> {
-    let log = std::fs::OpenOptions::new()
-        .create(true)
-        .write(true)
-        .append(true)
-        .open(format!("logs/{}.log", service.name))?;
-    let elog = log.try_clone()?;
+    service: Arc<RwLock<Service>>,
+    services_killed: Arc<Mutex<Vec<bool>>>,
+) -> std::io::Result<()> {
+    let fmt_service_name = cformat!(
+        "<blue, bold>{}</> (id <yellow>{}</>)",
+        service.read().name,
+        service.read().id
+    );
 
-    let child = Command::new(&service.path.canonicalize()?)
-        .args(&service.args)
-        .envs(service.envs.clone())
-        .current_dir(service.wd.canonicalize()?)
-        .stdout(log)
-        .stderr(elog)
-        .spawn()?;
-    let child = Arc::new(Mutex::new(child));
+    let mut attempts = 0;
+    let mut command_successful = false;
 
-    let thread_child = child.clone();
+    while (!command_successful || service.read().restart_on_success)
+        && RUNNING.load(Ordering::Relaxed)
+    {
+        let servlk = service.read();
 
-    std::thread::spawn(move || {
-        std::thread::sleep(std::time::Duration::from_secs(delay));
-        match thread_child.lock().wait() {
-            Ok(status) => {
-                if !status.success() {
-                    fail_tx.lock().broadcast(id);
-                }
+        let log = std::fs::OpenOptions::new()
+            .create(true)
+            .write(true)
+            .append(true)
+            .open(format!("logs/{}.log", servlk.name))?;
+        let log_err = log.try_clone()?;
+
+        let mut child = Command::new(&servlk.path.canonicalize()?)
+            .args(&servlk.args)
+            .envs(servlk.envs.clone())
+            .current_dir(servlk.wd.canonicalize()?)
+            .stdout(log)
+            .stderr(log_err)
+            .spawn()?;
+
+        attempts += 1;
+
+        drop(servlk);
+
+        match child.wait() {
+            Ok(_) if !RUNNING.load(Ordering::Relaxed) => break,
+            Ok(output) if output.success() => {
+                cprint!(
+                    "<yellow>Exit #{}</>: {fmt_service_name} successfully exited.",
+                    attempts
+                );
+                command_successful = true;
+            }
+            Ok(output) => {
+                cprint!("<red>Failure #{}</>: {fmt_service_name}", attempts);
             }
             Err(e) => {
-                color_print::cprintln!("<red>Error attempting to wait on service: {e}</>");
-                fail_tx.lock().broadcast(id);
+                cprint!(
+                    "<red>Failure #{}</> <magenta>(couldn't even start)</>: {fmt_service_name}",
+                    attempts
+                );
             }
         }
-    });
 
-    Ok(child)
+        if attempts >= service.read().max_restarts {
+            cprintln!(" | <cyan>It will not be restarted automatically.</>");
+            break;
+        }
+
+        let delay = if service.read().expo_backoff {
+            2u64.pow(attempts as u32)
+        } else {
+            1
+        };
+
+        if delay > 0 {
+            cprintln!(" | <cyan>Restarting in {} seconds</>", delay);
+            std::thread::sleep(std::time::Duration::from_secs(delay));
+        } else {
+            cprintln!(" | <cyan>Restarting immediately</>");
+        }
+    }
+
+    cprintln!("<magenta>Termination</>: {fmt_service_name}.");
+    services_killed.lock()[service.read().id] = true;
+
+    Ok(())
 }
-
-pub type ServiceRepr = (Arc<parking_lot::Mutex<Child>>, usize);
