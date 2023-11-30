@@ -1,94 +1,54 @@
 use clap::Parser;
-use color_print::{cprint, cprintln};
+use color_print::cprintln;
 use flack::lock_file;
-use parking_lot::{Mutex, RwLock};
-use pmrs::services::{spawn_service, Service};
-use rocket::tokio::{
-    self, task,
-    time::{sleep, Duration},
-};
-use std::sync::atomic::{AtomicBool, Ordering};
+use pmrs::SERVICES;
+use pmrs::services::Service;
+use std::sync::atomic::Ordering;
 use std::{
-    fs::{File, OpenOptions},
-    io::{BufRead, BufReader, Read, Write},
-    os::unix::net::UnixListener,
-    path::Path,
-    process::Child,
-    sync::Arc,
+    fs::File,
+    io::{Read, Write},
 };
-use sysinfo::{System, SystemExt};
-use toml::Table;
 
 #[rocket::main]
 async fn main() -> Result<(), Box<dyn std::error::Error + 'static>> {
-    // Setup signal handling
-    // let mut sigint = signal(SignalKind::interrupt()).expect("Failed to setup SIGINT handler");
-    // let mut sigterm = signal(SignalKind::terminate()).expect("Failed to setup SIGTERM handler");
-
-    let config_file = File::open(pmrs::DEFAULT_CONFIG_PATH)?;
-
     let cli = pmrs::cli::Cli::parse();
 
     // let mut sys = System::new_all();
     // sys.refresh_all();
 
     match cli.command {
-        pmrs::cli::Command::Start => start(config_file)?,
-        pmrs::cli::Command::Status => status(config_file)?,
+        pmrs::cli::Command::Start => start()?,
+        pmrs::cli::Command::Status => status()?,
         pmrs::cli::Command::Daemonise => daemonise()?,
     }
-
+ 
     Ok(())
 }
 
-fn start(mut config_file: File) -> Result<(), Box<dyn std::error::Error + 'static>> {
+fn start() -> Result<(), Box<dyn std::error::Error + 'static>> {
     // Ensure this is the sole instance of pmrs running
-    lock_file(&config_file).expect("another instance of pmrs is already running");
+    lock_file(&File::open(pmrs::DEFAULT_CONFIG_PATH)?)
+		.expect("another instance of pmrs is already running");
 
-    let mut config_file_buffer = Vec::new();
-    config_file.read_to_end(&mut config_file_buffer)?;
-    let config: Table = String::from_utf8_lossy(&config_file_buffer).parse()?;
-
-    // let services: Vec<RwLock<Service>> = Service::from_toml(config)
-    //     .into_iter()
-    //     .map(RwLock::new)
-    //     .collect();
-    let services: Arc<Vec<Arc<RwLock<Service>>>> = Arc::new(
-        Service::from_toml(config)
-            .into_iter()
-            .map(|s| Arc::new(RwLock::new(s)))
-            .collect(),
-    );
-
-    let highest_id = services.iter().map(|s| s.read().id).max().unwrap_or(0);
-    let services_killed = Arc::new(Mutex::new(vec![false; highest_id + 1])); // Maybe this should be a hashmap to avoid zombie IDs?
-
-    // (process reference, init count)
-    for service in services.iter() {
-        cprintln!("<green>Starting</> <blue, bold>{}</>", service.read().name);
-
-        let service_clone = service.clone();
-        let sk_clone = services_killed.clone();
-        std::thread::spawn(move || spawn_service(service_clone, sk_clone));
-    }
+	for service in SERVICES.iter() {
+		cprintln!("<green>Starting</> <blue, bold>{}</>", service.read().configuration.name);
+		std::thread::spawn(move || Service::spawn(service.clone()));
+	}
 
     rocket::tokio::spawn(async move {
-        pmrs::web::rocket(services.clone())
-            .await
-            .expect("run web dashboard.")
+        pmrs::web::rocket().await.expect("run web dashboard.")
     });
 
-    let ctrlc_sk = services_killed.clone();
     ctrlc::set_handler(move || {
         cprintln!("\n<red>Stopping</> <blue, bold>pmrs</>");
         pmrs::RUNNING.store(false, Ordering::SeqCst);
         // Wait until all services are killed.
         // If the below panic occurs, it means the service was not killed, or there is a zombie ID.
         let mut i = 0;
-        while ctrlc_sk.lock().iter().any(|&x| x == false) {
+		while &SERVICES.iter().any(|s| s.read().running) == &true {
             std::thread::sleep(std::time::Duration::from_millis(100));
             i += 1;
-            if i > 100 {
+            if i > 50 {
                 panic!("Failed to stop all services in 5 seconds. Please file a bug!");
             }
         }
@@ -111,11 +71,9 @@ fn start(mut config_file: File) -> Result<(), Box<dyn std::error::Error + 'stati
     //     }
     //     Err(e) => println!("accept function failed: {:?}", e),
     // }
-
-    Ok(())
 }
 
-fn status(mut config_file: File) -> Result<(), Box<dyn std::error::Error + 'static>> {
+fn status() -> Result<(), Box<dyn std::error::Error + 'static>> {
     let mut stream = std::os::unix::net::UnixStream::connect("/tmp/pmrs.sock")?;
     stream.write_all(b"hello world")?;
     let mut response = String::new();

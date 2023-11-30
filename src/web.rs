@@ -1,25 +1,37 @@
-#[macro_use]
-use rocket::{get, routes, launch, Rocket, Build, State};
+use rocket::{get, routes, State};
 use crate::services::Service;
-use parking_lot::{Mutex, RwLock};
+use parking_lot::RwLock;
 use std::sync::Arc;
+use rocket::serde::json::Json;
+use crate::SERVICES;
 
 #[get("/")]
-pub fn index(services: &State<Arc<Vec<Arc<RwLock<Service>>>>>) -> String {
-    let mut s = String::new();
-    for service in services.iter() {
-        s.push_str(&format!(
-            "{}: {}\n",
-            service.read().name,
-            service.read().path.display()
-        ));
-    }
-    s
+pub fn index() -> String {
+	println!("workinrst");
+    format!("Hello, world!")
 }
 
-pub async fn rocket(services: Arc<Vec<Arc<RwLock<Service>>>>) -> Result<(), rocket::Error> {
+#[get("/services")]
+pub fn services() -> Json<Vec<Service>> {
+	// Services to json
+	println!("lengh {:#?}", SERVICES.len());
+	Json(SERVICES.clone().iter().map(|s| {
+		let s = s.read().clone();
+		println!("{:?}", s);
+		s
+	}).collect())
+}
+
+#[get("/test")]
+pub fn test() -> String {
+	let mut fin = String::new();
+	fin += SERVICES[0].read().configuration.name.as_str();
+	format!("There are {} services\n{}", SERVICES.len(), fin)
+}
+
+pub async fn rocket() -> Result<(), rocket::Error> {
     let _rocket = rocket::build()
-        .mount("/", routes![index])
+        .mount("/", routes![index, services, test])
         .manage(services)
         .launch()
         .await?;
