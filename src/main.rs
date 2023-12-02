@@ -27,7 +27,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + 'static>> {
 
 fn start() -> Result<(), Box<dyn std::error::Error + 'static>> {
     // Ensure this is the sole instance of pmrs running
-    lock_file(&File::open(pmrs::DEFAULT_CONFIG_PATH)?)
+    lock_file(&File::open(*pmrs::DEFAULT_CONFIG_PATH)?)
 		.expect("another instance of pmrs is already running");
 
 	for service in SERVICES.iter() {

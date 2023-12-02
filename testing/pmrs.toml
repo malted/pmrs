@@ -4,24 +4,52 @@ global_env = "staging"
 
 [services]
 
-# [services.fails]
-# path = "testing/fails/target/release/fails"
-# max_restarts = 3
-
-# [services.fails2]
-# path = "testing/fails/target/release/fails"
-
-# [services.envs]
-# path = "testing/envs/target/release/envs"
-# envs = { "PMRSONE" = "WOO! IT WORKED!", "PMRS TWO" = "the space worked! 🥺" }
-# wd = "logs"
+[services.Dashboard]
+wd = "dashboard"
+cmd = "bun run preview"
 
 [services."Deno panic test 001"]
-path = "testing/deno-bins/deno-bins"
-envs = { "PORT" = "3006" }
-restart_on_success = true
+cmd = "testing/deno-bins/fail"
+expo_backoff = true
 
 [services."Deno panic test 002"]
-path = "testing/deno-bins/fail"
-expo_backoff = false
-max_restarts = 3
+cmd = "testing/deno-bins/fail"
+expo_backoff = true
+
+[services."Deno panic test 003"]
+cmd = "testing/deno-bins/fail"
+expo_backoff = true
+
+[services."Deno Test API 001"]
+cmd = "testing/deno-bins/deno-bins"
+envs = { "PORT" = "3006" }
+restart_on_success = true
+proxy = "malted.dev/p1"
+
+[services."Deno Test API 002"]
+cmd = "testing/deno-bins/deno-bins"
+restart_on_success = true
+proxy = "malted.dev/p1"
+envs = { "PORT" = "3007" }
+
+[services."Deno Test API 003"]
+cmd = "testing/deno-bins/deno-bins"
+restart_on_success = true
+proxy = "malted.dev/p1"
+envs = { "PORT" = "3008" }
+
+[services."Deno Test API 004"]
+cmd = "testing/deno-bins/deno-bins"
+restart_on_success = true
+proxy = "malted.dev/p1"
+envs = { "PORT" = "3009" }
+
+[services."Deno Test API 005"]
+cmd = "testing/deno-bins/deno-bins"
+restart_on_success = true
+envs = { "PORT" = "3010" }
+
+[services."Deno Test API 006"]
+cmd = "testing/deno-bins/deno-bins"
+restart_on_success = true
+envs = { "PORT" = "3011" }

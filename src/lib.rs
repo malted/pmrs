@@ -9,11 +9,17 @@ use crate::services::Service;
 use std::fs::File;
 
 lazy_static::lazy_static! {
-    pub static ref RUNNING: Arc<AtomicBool> = Arc::new(AtomicBool::new(true));
-	pub static ref SERVICES: Arc<Vec<Arc<RwLock<Service>>>> = Service::init(File::open(crate::DEFAULT_CONFIG_PATH).expect("the config file")).expect("a valid service");
-}
+		pub static ref DEFAULT_CONFIG_PATH: &'static str = {
+        if cfg!(debug_assertions) {
+			"./testing/pmrs.toml"
+		} else {
+			"/etc/pmrs/pmrs.toml"
+		}
+    };
 
-pub const DEFAULT_CONFIG_PATH: &str = "./testing/pmrs.toml";
+    pub static ref RUNNING: Arc<AtomicBool> = Arc::new(AtomicBool::new(true));
+	pub static ref SERVICES: Arc<Vec<Arc<RwLock<Service>>>> = Service::init(File::open(*DEFAULT_CONFIG_PATH).expect("the config file")).expect("a valid service");
+}
 
 #[macro_export]
 macro_rules! function_name {

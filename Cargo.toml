@@ -6,7 +6,6 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-bus = "2.4.1"
 clap = { version = "4.4.8", features = ["derive"] }
 parking_lot = "0.12.1"
 serde = { version = "1.0.192", features = ["derive"] }
@@ -15,7 +14,7 @@ toml = "0.8.8"
 flack = "*"
 tabled = "0.14.0"
 color-print = "0.3.5"
-rocket = "0.5.0"
+rocket = { version = "0.5.0", features = ["json"] }
 signal-hook = "0.3.17"
 lazy_static = "1.4.0"
 ctrlc = "3.4.1"

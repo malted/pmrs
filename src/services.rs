@@ -1,8 +1,9 @@
 use crate::RUNNING;
 use color_print::{cformat, cprint, cprintln};
 use parking_lot::RwLock;
+use rocket::tokio::io::stdout;
 use serde::{Deserialize, Serialize};
-use std::env;
+use std::env::{self, args};
 use std::fs::File;
 use std::path::PathBuf;
 use std::process::{Child, Command};
@@ -10,16 +11,18 @@ use std::sync::atomic::Ordering;
 use std::sync::Arc;
 use toml::Table;
 use std::io::Read;
+use std::io::Write;
+use std::io::Stdout;
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct ServiceConfiguration {
     pub id: usize,
     pub name: String,                // The name of the service.
-    pub path: PathBuf,               // A path to the executable file.
     pub args: Vec<String>,           // A list of arguments to pass to the executable file.
     pub envs: Vec<(String, String)>, // A list of kv environment variables to pass to the executable file.
     pub wd: PathBuf, // A path to the working directory from which the executable file should be run.
-    pub max_restarts: usize, // The maximum number of times the service can be restarted before pmrs gives up on it. usize::MAX by default.
+	pub cmd: String, 	// If the cmd is a valid path, treat it as a binary. Otherwise, treat it as a shell command.
+    pub max_restarts: Option<usize>, // The maximum number of times the service can be restarted before pmrs gives up on it. None by default.
     pub restart_on_success: bool, // Whether or not to restart the service when it exits successfully.
     pub expo_backoff: bool, // Whether or not to use exponential backoff when restarting the service.
 	pub proxy: Option<String>, // Proxy the service through this url root.
@@ -58,46 +61,9 @@ impl ServiceConfiguration {
 pub type ServiceConfigurationEntry<'a> = (&'a String, &'a toml::Value);
 impl Into<ServiceConfiguration> for ServiceConfigurationEntry<'_> {
     fn into(self) -> ServiceConfiguration {
-        let name = self.0.to_owned();
-        let path: PathBuf = self
-            .1
-            .get("path")
-            .expect("a path")
-            .as_str()
-            .expect("")
-            .into();
-        if !path.is_file() {
-            panic!(
-                "The supplied path ({}) for service \"{name}\" is not a file. It should be.",
-                path.display()
-            )
-        }
-
-        let wd: PathBuf = if let Some(wd) = self
-            .1
-            .get("wd")
-            .and_then(|x| x.as_str())
-            .map(|x| Into::<PathBuf>::into(x))
-        {
-            if !wd.is_dir() {
-                panic!("The supplied working directory ({}) for service \"{name}\" is not a directory. It should be.", wd.display())
-            }
-            wd
-        } else if self
-            .1
-            .get("auto_wd")
-            .map(|x| x.as_bool().unwrap_or(false))
-            .unwrap_or(false)
-        {
-            path.as_path().parent().expect("a parent").to_owned()
-        } else {
-            env::current_dir().expect("a current dir")
-        };
-
         ServiceConfiguration {
             id: usize::MAX,
-            name,
-            path,
+            name: self.0.to_owned(),
             args: self
                 .1
                 .get("args")
@@ -114,16 +80,21 @@ impl Into<ServiceConfiguration> for ServiceConfigurationEntry<'_> {
                 .iter()
                 .map(|(key, value)| (key.to_owned(), value.as_str().expect("a str").to_owned()))
                 .collect(),
-            wd,
-            max_restarts: self
+            wd: self
+				.1
+				.get("wd")
+				.map(|i| PathBuf::from(i.as_str().expect("a str")).canonicalize().unwrap())
+				.unwrap_or(env::current_dir().unwrap())
+				.to_owned()
+				.into(),
+			cmd: self.1.get("cmd").map(|x| x.as_str().expect("a str").to_owned()).expect("a cmd key"),
+			max_restarts: self
                 .1
                 .get("max_restarts")
                 .map(|i| {
-                    i.as_integer()
-                        .expect("the max restart count to be an integer")
-                        as usize
+                    Some(i.as_integer().expect("the max restart count to be an integer") as usize)
                 })
-                .unwrap_or(usize::MAX),
+                .unwrap_or(None),
             restart_on_success: self
                 .1
                 .get("restart_on_success")
@@ -142,18 +113,17 @@ impl Into<ServiceConfiguration> for ServiceConfigurationEntry<'_> {
 #[derive(Deserialize, Serialize, Debug, Clone)]
 pub struct Service {
 	pub configuration: ServiceConfiguration,
-	#[serde(skip_serializing, skip_deserializing)]
-	pub child: Arc<Option<Child>>,
 	pub running: bool,
-	pub restarts : usize,
+	pub restarts: usize,
+	pub exit_code: Option<i32>,
 }
 impl From<ServiceConfiguration> for Service {
 	fn from(configuration: ServiceConfiguration) -> Self {
 		Self {
 			configuration,
-			child: Arc::new(None),
 			running: false,
 			restarts: 0,
+			exit_code: None,
 		}
 	}
 }
@@ -170,6 +140,7 @@ impl Service {
 
 		Ok(Arc::new(services))
 	}
+
 	/// Spawn a service.
 	/// 
 	/// Spawn a service with the given configuration. The service will be spawned in a new thread.
@@ -187,20 +158,30 @@ impl Service {
 			.append(true);
 
 		while (!command_successful || s.read().configuration.restart_on_success) && RUNNING.load(Ordering::Relaxed) {
-			let cfg = &s.read().configuration;
+			attempts += 1;
+			cprintln!("<green>Attempt #{}</>: {fmt_service_name}", attempts);
 
 			let log = logfile_options.open(format!("logs/{}.log", s.read().configuration.name))?;
-			let log_err = logfile_options.open(format!("logs/{}.error.log", cfg.name))?;
+			let log_err = logfile_options.open(format!("logs/{}.error.log", s.read().configuration.name))?;
 
-			let mut child = Command::new(&cfg.path.canonicalize()?)
-				.args(&s.read().configuration.args)
-				.envs(cfg.envs.clone())
-				.current_dir(cfg.wd.canonicalize()?)
+			let program = match PathBuf::from(&s.read().configuration.cmd).canonicalize() {
+				Ok(canonical_path) if canonical_path.is_file() => {
+					canonical_path.to_str().map(|s| s.to_owned()).expect("path is not a vaild utf-8 string")
+				},
+				_ => s.read().configuration.cmd.clone(),
+			};
+
+			let mut program = program.split_whitespace();
+
+			let mut child = std::process::Command::new(&program.next().expect("a program name/path"))
+				.args(program.clone().map(|s| s.to_string()).chain(s.read().configuration.args.clone()).collect::<Vec<String>>())
+				.envs(s.read().configuration.envs.clone())
+				.current_dir("dashboard")
 				.stdout(log)
 				.stderr(log_err)
 				.spawn()?;
 
-			attempts += 1;
+			s.write().running = true;
 
 			match child.wait() {
 				Ok(_) if !RUNNING.load(Ordering::Relaxed) => break,
@@ -210,24 +191,30 @@ impl Service {
 						attempts
 					);
 					command_successful = true;
+					s.write().running = false;
 				}
 				Ok(_) => {
 					cprint!("<red>Failure #{}</>: {fmt_service_name}", attempts);
+					s.write().running = false;
 				}
 				Err(_) => {
 					cprint!(
 						"<red>Failure #{}</> <magenta>(couldn't even start)</>: {fmt_service_name}",
 						attempts
 					);
+					s.write().running = false;
 				}
 			}
 
-			if attempts >= cfg.max_restarts {
-				cprintln!(" | <cyan>It will not be restarted automatically.</>");
-				break;
+			// Failures is attempts - 1 because the first attempt is not a failure.
+			if let Some(max_restarts) = s.read().configuration.max_restarts {
+				if attempts > max_restarts {
+					cprintln!(" | <cyan>It will not be restarted automatically.</>");
+					break;
+				}
 			}
 
-			let delay = if cfg.expo_backoff {
+			let delay = if s.read().configuration.expo_backoff {
 				2u64.pow(attempts as u32)
 			} else {
 				1
@@ -239,10 +226,13 @@ impl Service {
 			} else {
 				cprintln!(" | <cyan>Restarting immediately</>");
 			}
+
+			s.write().restarts += 1;
 		}
 
-		cprintln!("<magenta>Termination</>: {fmt_service_name}.");
 		s.write().running = false;
+
+		cprintln!("<magenta>Termination</>: {fmt_service_name}.");
 		
 		Ok(())
 	}
