@@ -169,6 +169,8 @@ impl Service {
             s.read().configuration.name,
             s.read().configuration.id
         );
+        cprintln!("<green>Starting</> {fmt_service_name}");
+
         let mut attempts = 0;
         let mut command_successful = false;
 

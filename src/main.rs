@@ -1,36 +1,36 @@
 use clap::Parser;
 use color_print::cprintln;
 use flack::lock_file;
-use pmrs::{caddy, services::Service, SERVICES};
-use std::sync::atomic::Ordering;
+use pmrs::{caddy, cli, services::Service, SERVICES};
 use std::{
-    fs::File,
-    io::{Read, Write},
+    fs,
+    io::{self, Read, Write},
+    os::unix::{fs::PermissionsExt, net::UnixStream},
+    process,
+    sync::atomic::Ordering,
+    thread,
 };
 
 #[rocket::main]
-async fn main() -> Result<(), Box<dyn std::error::Error + 'static>> {
-    match pmrs::cli::Cli::parse().command {
-        pmrs::cli::Command::Start => start()?,
-        pmrs::cli::Command::Status => status()?,
-        pmrs::cli::Command::Daemonise => daemonise()?,
+async fn main() -> io::Result<()> {
+    match cli::Cli::parse().command {
+        cli::Command::Start => start()?,
+        cli::Command::Setup => setup()?,
+        cli::Command::Status => status()?,
+        cli::Command::Daemonise => daemonise()?,
     }
 
     Ok(())
 }
 
-fn start() -> Result<(), Box<dyn std::error::Error + 'static>> {
+fn start() -> io::Result<()> {
     // Ensure this is the sole instance of pmrs running
-    lock_file(&File::open(*pmrs::DEFAULT_CONFIG_PATH)?)?;
+    lock_file(&fs::File::open(*pmrs::DEFAULT_CONFIG_PATH)?)?;
 
     /* Start services */
     {
         for service in SERVICES.iter() {
-            cprintln!(
-                "<green>Starting</> <blue, bold>{}</>",
-                service.read().configuration.name
-            );
-            std::thread::spawn(move || Service::spawn(service.clone()));
+            thread::spawn(|| Service::spawn(service.clone()));
         }
     }
 
@@ -41,21 +41,26 @@ fn start() -> Result<(), Box<dyn std::error::Error + 'static>> {
                 .await
                 .expect("failed to start the dashboard API")
         });
-        // std::thread::spawn(|| {
-        //     std::process::Command::new("deno")
-        //         .arg("run")
-        //         .arg("--allow-env")
-        //         .arg("--allow-read")
-        //         .arg("--allow-net")
-        //         .arg(*pmrs::DASHBOARD_BUILD_PATH)
-        //         .spawn()
-        //         .expect("failed to start web dashboard");
-        // });
+
+        if !cfg!(debug_assertions) {
+            thread::spawn(|| {
+                std::process::Command::new("deno")
+                    .arg("run")
+                    .arg("--allow-env")
+                    .arg("--allow-read")
+                    .arg("--allow-net")
+                    .arg(*pmrs::DASHBOARD_BUILD_PATH)
+                    .spawn()
+                    .expect("failed to start web dashboard");
+            });
+        } else {
+            cprintln!("<yellow>Running in debug mode; skipping web dashboard startup</>");
+        }
     }
 
     /* Caddy */
     {
-        std::thread::spawn(|| caddy::start());
+        thread::spawn(|| caddy::start());
     }
 
     /* Graceful shutdown */
@@ -67,7 +72,7 @@ fn start() -> Result<(), Box<dyn std::error::Error + 'static>> {
             // If the below panic occurs, it means the service was not killed, or there is a zombie ID.
             let mut i = 0;
             while &SERVICES.iter().any(|s| s.read().running) == &true {
-                std::thread::sleep(std::time::Duration::from_millis(100));
+                thread::sleep(std::time::Duration::from_millis(100));
                 i += 1;
                 if i > 50 {
                     panic!("Failed to stop all services in 5 seconds. Please file a bug!");
@@ -95,8 +100,23 @@ fn start() -> Result<(), Box<dyn std::error::Error + 'static>> {
     // }
 }
 
-fn status() -> Result<(), Box<dyn std::error::Error + 'static>> {
-    let mut stream = std::os::unix::net::UnixStream::connect("/tmp/pmrs.sock")?;
+fn setup() -> std::io::Result<()> {
+    // Create the config file if it doesn't exist
+    if !std::path::Path::new(*pmrs::DEFAULT_CONFIG_PATH).exists() {
+        fs::create_dir_all("/etc/pmrs")?;
+        fs::copy("src/pmrs.toml.template", *pmrs::DEFAULT_CONFIG_PATH)?;
+    }
+
+    // Create the dashboard build directory if it doesn't exist
+    if !std::path::Path::new(*pmrs::DASHBOARD_BUILD_PATH).exists() {
+        fs::create_dir_all("/usr/share/pmrs/dashboard/build")?;
+    }
+
+    Ok(())
+}
+
+fn status() -> io::Result<()> {
+    let mut stream = UnixStream::connect("/tmp/pmrs.sock")?;
     stream.write_all(b"hello world")?;
     let mut response = String::new();
     stream.read_to_string(&mut response)?;
@@ -105,9 +125,7 @@ fn status() -> Result<(), Box<dyn std::error::Error + 'static>> {
     Ok(())
 }
 
-use std::fs;
-use std::os::unix::fs::PermissionsExt;
-fn daemonise() -> std::io::Result<()> {
+fn daemonise() -> io::Result<()> {
     let service_file = if cfg!(debug_assertions) {
         "testing/systemd/pmrs.service"
     } else {
@@ -122,7 +140,7 @@ fn daemonise() -> std::io::Result<()> {
     fs::set_permissions(service_file, permissions)?;
 
     // Reload systemd
-    std::process::Command::new("systemctl")
+    process::Command::new("systemctl")
         .arg("enable")
         .arg("--now")
         .arg("pmrs.service")
