@@ -1,5 +1,3 @@
-#![feature(file_create_new)]
-
 pub mod caddy;
 pub mod cli;
 pub mod services;
