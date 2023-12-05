@@ -1,8 +1,8 @@
 use clap::Parser;
 use color_print::cprintln;
 use flack::lock_file;
-use pmrs::SERVICES;
 use pmrs::services::Service;
+use pmrs::SERVICES;
 use std::sync::atomic::Ordering;
 use std::{
     fs::File,
@@ -13,48 +13,66 @@ use std::{
 async fn main() -> Result<(), Box<dyn std::error::Error + 'static>> {
     let cli = pmrs::cli::Cli::parse();
 
-    // let mut sys = System::new_all();
-    // sys.refresh_all();
-
     match cli.command {
         pmrs::cli::Command::Start => start()?,
         pmrs::cli::Command::Status => status()?,
         pmrs::cli::Command::Daemonise => daemonise()?,
     }
- 
+
     Ok(())
 }
 
 fn start() -> Result<(), Box<dyn std::error::Error + 'static>> {
     // Ensure this is the sole instance of pmrs running
     lock_file(&File::open(*pmrs::DEFAULT_CONFIG_PATH)?)
-		.expect("another instance of pmrs is already running");
+        .expect("another instance of pmrs is already running");
 
-	for service in SERVICES.iter() {
-		cprintln!("<green>Starting</> <blue, bold>{}</>", service.read().configuration.name);
-		std::thread::spawn(move || Service::spawn(service.clone()));
-	}
+    for service in SERVICES.iter() {
+        cprintln!(
+            "<green>Starting</> <blue, bold>{}</>",
+            service.read().configuration.name
+        );
+        std::thread::spawn(move || Service::spawn(service.clone()));
+    }
 
-    rocket::tokio::spawn(async move {
-        pmrs::web::rocket().await.expect("run web dashboard.")
-    });
+    /* Web Dashboard */
+    {
+        rocket::tokio::spawn(async move {
+            pmrs::web::rocket()
+                .await
+                .expect("failed to start the dashboard API")
+        });
+        // std::thread::spawn(|| {
+        //     std::process::Command::new("deno")
+        //         .arg("run")
+        //         .arg("--allow-env")
+        //         .arg("--allow-read")
+        //         .arg("--allow-net")
+        //         .arg(*pmrs::DASHBOARD_BUILD_PATH)
+        //         .spawn()
+        //         .expect("failed to start web dashboard");
+        // });
+    }
 
-    ctrlc::set_handler(move || {
-        cprintln!("\n<red>Stopping</> <blue, bold>pmrs</>");
-        pmrs::RUNNING.store(false, Ordering::SeqCst);
-        // Wait until all services are killed.
-        // If the below panic occurs, it means the service was not killed, or there is a zombie ID.
-        let mut i = 0;
-		while &SERVICES.iter().any(|s| s.read().running) == &true {
-            std::thread::sleep(std::time::Duration::from_millis(100));
-            i += 1;
-            if i > 50 {
-                panic!("Failed to stop all services in 5 seconds. Please file a bug!");
+    /* Graceful shutdown */
+    {
+        ctrlc::set_handler(move || {
+            cprintln!("\n<red>Stopping</> <blue, bold>pmrs</>");
+            pmrs::RUNNING.store(false, Ordering::SeqCst);
+            // Wait until all services are killed.
+            // If the below panic occurs, it means the service was not killed, or there is a zombie ID.
+            let mut i = 0;
+            while &SERVICES.iter().any(|s| s.read().running) == &true {
+                std::thread::sleep(std::time::Duration::from_millis(100));
+                i += 1;
+                if i > 50 {
+                    panic!("Failed to stop all services in 5 seconds. Please file a bug!");
+                }
             }
-        }
-        std::process::exit(0);
-    })
-    .expect("Error setting Ctrl-C handler");
+            std::process::exit(0);
+        })
+        .expect("Error setting Ctrl-C handler");
+    }
 
     loop {}
 

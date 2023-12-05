@@ -4,10 +4,6 @@ global_env = "staging"
 
 [services]
 
-[services.Dashboard]
-wd = "dashboard"
-cmd = "bun run preview"
-
 [services."Deno panic test 001"]
 cmd = "testing/deno-bins/fail"
 expo_backoff = true

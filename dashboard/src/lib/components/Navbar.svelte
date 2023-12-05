@@ -1,11 +1,12 @@
 <script>
 	import Logo from "./Logo.svelte";
-	import Pill from "./Pill.svelte";
 </script>
 
 <nav class="flex justify-between p-3 bg-zinc-100 dark:bg-zinc-800 text-zinc-900 dark:text-zinc-100">
 	<div class="flex items-center gap-4">
 		<Logo />
+		<a href="/" class="ml-4">Services</a>
+		<a href="/system">System</a>
 	</div>
 
 	<ul>
