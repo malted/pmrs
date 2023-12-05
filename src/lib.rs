@@ -2,8 +2,8 @@
 
 pub mod cli;
 pub mod services;
-pub mod web;
 pub mod sysinfo_wrappers;
+pub mod web;
 
 use crate::services::Service;
 use parking_lot::RwLock;
@@ -17,7 +17,6 @@ lazy_static::lazy_static! {
         } else {
             "/etc/pmrs/pmrs.toml"
         }
-
     };
     pub static ref DASHBOARD_BUILD_PATH: &'static str = {
         if cfg!(debug_assertions) {
