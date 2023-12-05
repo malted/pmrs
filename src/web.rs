@@ -12,6 +12,7 @@ use rocket_ws as ws;
 fn system_internal(sys_info: &State<RwLock<System>>) -> sysinfo_wrappers::System {
 	sys_info.write().refresh_all();
 	sys_info.write().refresh_networks();
+	sys_info.write().refresh_disks_list();
 	sys_info.write().refresh_disks();
 
 	sysinfo_wrappers::System::init(sys_info.inner())
