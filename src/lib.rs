@@ -1,5 +1,6 @@
 #![feature(file_create_new)]
 
+pub mod caddy;
 pub mod cli;
 pub mod services;
 pub mod sysinfo_wrappers;
@@ -25,6 +26,10 @@ lazy_static::lazy_static! {
             "/usr/share/pmrs/dashboard/build/index.js"
         }
     };
+
+    pub static ref PORT_ROCKET: isize = 8000;
+    pub static ref PORT_DASHBOARD: isize = 5173;
+    pub static ref PORT_CADDY: isize = 2019;
 
     pub static ref RUNNING: Arc<AtomicBool> = Arc::new(AtomicBool::new(true));
     pub static ref SERVICES: Arc<Vec<Arc<RwLock<Service>>>> = Service::init(File::open(*DEFAULT_CONFIG_PATH).expect("the config file")).expect("a valid service");

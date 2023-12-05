@@ -1,8 +1,7 @@
 use clap::Parser;
 use color_print::cprintln;
 use flack::lock_file;
-use pmrs::services::Service;
-use pmrs::SERVICES;
+use pmrs::{caddy, services::Service, SERVICES};
 use std::sync::atomic::Ordering;
 use std::{
     fs::File,
@@ -11,9 +10,7 @@ use std::{
 
 #[rocket::main]
 async fn main() -> Result<(), Box<dyn std::error::Error + 'static>> {
-    let cli = pmrs::cli::Cli::parse();
-
-    match cli.command {
+    match pmrs::cli::Cli::parse().command {
         pmrs::cli::Command::Start => start()?,
         pmrs::cli::Command::Status => status()?,
         pmrs::cli::Command::Daemonise => daemonise()?,
@@ -24,15 +21,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error + 'static>> {
 
 fn start() -> Result<(), Box<dyn std::error::Error + 'static>> {
     // Ensure this is the sole instance of pmrs running
-    lock_file(&File::open(*pmrs::DEFAULT_CONFIG_PATH)?)
-        .expect("another instance of pmrs is already running");
+    lock_file(&File::open(*pmrs::DEFAULT_CONFIG_PATH)?)?;
 
-    for service in SERVICES.iter() {
-        cprintln!(
-            "<green>Starting</> <blue, bold>{}</>",
-            service.read().configuration.name
-        );
-        std::thread::spawn(move || Service::spawn(service.clone()));
+    /* Start services */
+    {
+        for service in SERVICES.iter() {
+            cprintln!(
+                "<green>Starting</> <blue, bold>{}</>",
+                service.read().configuration.name
+            );
+            std::thread::spawn(move || Service::spawn(service.clone()));
+        }
     }
 
     /* Web Dashboard */
@@ -52,6 +51,11 @@ fn start() -> Result<(), Box<dyn std::error::Error + 'static>> {
         //         .spawn()
         //         .expect("failed to start web dashboard");
         // });
+    }
+
+    /* Caddy */
+    {
+        std::thread::spawn(|| caddy::start());
     }
 
     /* Graceful shutdown */
