@@ -31,6 +31,8 @@ lazy_static::lazy_static! {
 
     pub static ref RUNNING: Arc<AtomicBool> = Arc::new(AtomicBool::new(true));
     pub static ref SERVICES: Arc<Vec<Arc<RwLock<Service>>>> = Service::init(File::open(*DEFAULT_CONFIG_PATH).expect("the config file")).expect("a valid service");
+
+    pub static ref HTTP_RE: regex::Regex = regex::Regex::new(r"^https?://").unwrap();
 }
 
 #[macro_export]

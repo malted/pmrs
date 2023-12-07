@@ -26,6 +26,7 @@ pub struct ServiceConfiguration {
     pub restart_on_success: bool, // Whether or not to restart the service when it exits successfully.
     pub expo_backoff: bool, // Whether or not to use exponential backoff when restarting the service.
     pub proxy: Option<String>, // Proxy the service through this url root.
+    pub port: Option<u16>,
 }
 impl ServiceConfiguration {
     pub fn from_toml(config: Table) -> Vec<Self> {
@@ -121,6 +122,10 @@ impl Into<ServiceConfiguration> for ServiceConfigurationEntry<'_> {
                 .1
                 .get("proxy")
                 .map(|i| i.as_str().expect("a str").to_owned()),
+            port: self
+                .1
+                .get("port")
+                .map(|i| i.as_integer().expect("a number") as u16),
         }
     }
 }
@@ -197,21 +202,25 @@ impl Service {
 
             let mut program = program.split_whitespace();
 
-            let mut child =
-                std::process::Command::new(&program.next().expect("a program name/path"))
-                    .args(
-                        program
-                            .clone()
-                            .map(|s| s.to_string())
-                            .chain(s.read().configuration.args.clone())
-                            .collect::<Vec<String>>(),
-                    )
-                    .envs(s.read().configuration.envs.clone())
-                    .current_dir("dashboard")
-                    .stdout(log)
-                    .stderr(log_err)
-                    .spawn()?;
+            let mut command = Command::new(&program.next().expect("a program name/path"));
+            let command = command
+                .args(
+                    program
+                        .clone()
+                        .map(|s| s.to_string())
+                        .chain(s.read().configuration.args.clone())
+                        .collect::<Vec<String>>(),
+                )
+                .envs(s.read().configuration.envs.clone())
+                .current_dir("dashboard")
+                .stdout(log)
+                .stderr(log_err);
 
+            if let Some(port) = s.read().configuration.port {
+                command.env("PORT", port.to_string());
+            }
+
+            let mut child = command.spawn()?;
             s.write().running = true;
 
             match child.wait() {
