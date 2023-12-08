@@ -26,29 +26,31 @@
 		</div>
 	</div>
 
-	<ul class="flex flex-col gap-4">
-		{#each data.payload as service}
-			{@const cfg = service.configuration}
-			{@const port = cfg.envs.find((env: [string, string]) => env[0] === "PORT")?.[1]}
-			<li class="{panelClass} w-full">
-				<div id="l1-info" class="flex gap-1">
-					<div class="flex gap-2">
-						<h2 class="text-xl">{cfg.name}</h2>
-						<Pill type={service.running ? "success" : "error"}>{service.running ? "Running" : "Stopped"}</Pill>
+	{#if data.payload}
+		<ul class="flex flex-col gap-4">
+			{#each data.payload as service}
+				{@const cfg = service.configuration}
+				{@const port = cfg.envs.find((env: [string, string]) => env[0] === "PORT")?.[1]}
+				<li class="{panelClass} w-full">
+					<div id="l1-info" class="flex gap-1">
+						<div class="flex gap-2">
+							<h2 class="text-xl">{cfg.name}</h2>
+							<Pill type={service.running ? "success" : "error"}>{service.running ? "Running" : "Stopped"}</Pill>
+						</div>
+						<Pill type="neutral">
+							🔄&nbsp;
+							<p>{service.restarts}</p>
+						</Pill>
 					</div>
-					<Pill type="neutral">
-						🔄&nbsp;
-						<p>{service.restarts}</p>
-					</Pill>
-				</div>
-				{#if port}
-					<div class="flex items-center gap-2">
-						🌐 <p>{port}</p> → <a href="https://malted.dev/api">malted.dev/api/</a>
-					</div>
-				{/if}
-			</li>
-		{/each}
-	</ul>
+					{#if port}
+						<div class="flex items-center gap-2">
+							🌐 <p>{port}</p> → <a href="https://malted.dev/api">malted.dev/api/</a>
+						</div>
+					{/if}
+				</li>
+			{/each}
+		</ul>
+	{/if}
 </section>
 
 <style>
