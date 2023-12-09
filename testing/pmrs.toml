@@ -5,51 +5,51 @@ global_env = "staging"
 [services]
 
 [services."Deno panic test 001"]
-cmd = "testing/deno-bins/fail"
+cmd = "test/fail"
 expo_backoff = true
 port = 3003
 
 [services."Deno panic test 002"]
-cmd = "testing/deno-bins/fail"
+cmd = "test/fail"
 expo_backoff = true
 port = 3004
 
 [services."Deno panic test 003"]
-cmd = "testing/deno-bins/fail"
+cmd = "test/fail"
 expo_backoff = true
 port = 3005
 
 [services."Deno Test API 001"]
-cmd = "testing/deno-bins/deno-bins"
+cmd = "test/deno-bins"
 restart_on_success = true
 proxy = "malted.dev/p1"
 port = 3006
 
 [services."Deno Test API 002"]
-cmd = "testing/deno-bins/deno-bins"
+cmd = "test/deno-bins"
 restart_on_success = true
 proxy = "malted.dev/p2"
 port = 3007
 
 [services."Deno Test API 003"]
-cmd = "testing/deno-bins/deno-bins"
+cmd = "test/deno-bins"
 restart_on_success = true
 proxy = "malted.dev/p3"
 port = 3008
 
 [services."Deno Test API 004"]
-cmd = "testing/deno-bins/deno-bins"
+cmd = "test/deno-bins"
 restart_on_success = true
 proxy = "malted.dev/p4"
 port = 3009
 
 [services."Deno Test API 005"]
-cmd = "testing/deno-bins/deno-bins"
+cmd = "test/deno-bins"
 restart_on_success = true
 proxy = "malted.dev/p5"
 port = 3010
 
 [services."Deno Test API 006"]
-cmd = "testing/deno-bins/deno-bins"
+cmd = "test/deno-bins"
 restart_on_success = true
 port = 3011

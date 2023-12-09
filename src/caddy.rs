@@ -73,7 +73,7 @@ pub fn start() -> io::Result<()> {
         .header("Content-Type", "text/caddyfile")
         .body(caddyfile)
         .send()
-        .expect("coud not esnd caddyfile")
+        .expect("coud not send caddyfile")
         .text()
         .expect("i wanted text :(((");
 
