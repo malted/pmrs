@@ -12,7 +12,7 @@ use std::{
 };
 
 #[rocket::main]
-fn main() -> io::Result<()> {
+async fn main() -> io::Result<()> {
     match cli::Cli::parse().command {
         cli::Command::Start => start()?,
         cli::Command::Setup => setup()?,
