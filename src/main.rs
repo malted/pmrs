@@ -44,7 +44,7 @@ fn start() -> io::Result<()> {
 
         if !cfg!(debug_assertions) {
             thread::spawn(|| {
-				let dash_log_options = std::fs::OpenOptions::new();
+				let mut dash_log_options = std::fs::OpenOptions::new();
 				let dash_log_options = dash_log_options.create(true).append(true);
 
 				let stdout = dash_log_options
