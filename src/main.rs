@@ -44,12 +44,24 @@ fn start() -> io::Result<()> {
 
         if !cfg!(debug_assertions) {
             thread::spawn(|| {
+				let dash_log_options = std::fs::OpenOptions::new()
+				let dash_log_options = dash_log_options.create(true).append(true);
+
+				let stdout = dash_log_options
+					.open("/var/log/pmrs/dashboard.log")
+					.expect("failed to open dashboard log file");
+				let stderr = dash_log_options
+					.open("/var/log/pmrs/dashboard.error.log")
+					.expect("failed to open dashboard error log file");
+
                 std::process::Command::new("deno")
                     .arg("run")
                     .arg("--allow-env")
                     .arg("--allow-read")
                     .arg("--allow-net")
                     .arg(*pmrs::DASHBOARD_BUILD_PATH)
+					.stdout(stdout)
+					.stderr(stderr)
                     .spawn()
                     .expect("failed to start web dashboard");
             });
