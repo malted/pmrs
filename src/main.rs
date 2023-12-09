@@ -11,7 +11,7 @@ use std::{
     thread,
 };
 
-// #[rocket::main]
+#[rocket::main]
 fn main() -> io::Result<()> {
     match cli::Cli::parse().command {
         cli::Command::Start => start()?,
