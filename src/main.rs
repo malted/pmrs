@@ -13,14 +13,12 @@ use std::{
 
 // #[rocket::main]
 fn main() -> io::Result<()> {
-    pmrs::caddy::start()?;
-
-    // match cli::Cli::parse().command {
-    //     cli::Command::Start => start()?,
-    //     cli::Command::Setup => setup()?,
-    //     cli::Command::Status => status()?,
-    //     cli::Command::Daemonise => daemonise()?,
-    // }
+    match cli::Cli::parse().command {
+        cli::Command::Start => start()?,
+        cli::Command::Setup => setup()?,
+        cli::Command::Status => status()?,
+        cli::Command::Daemonise => daemonise()?,
+    }
 
     Ok(())
 }
