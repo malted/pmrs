@@ -2,7 +2,7 @@ use crate::PORT_CADDY;
 use parking_lot::RwLock;
 use rocket::http::hyper::uri::Port;
 use std::sync::Arc;
-use std::{collections::HashMap, io};
+use std::{collections::HashMap, io::{self, Write}};
 
 use crate::services::Service;
 
@@ -43,29 +43,32 @@ pub fn start() -> io::Result<()> {
                 let url =
                     url::Url::parse(&format!("http://{proxy}")).expect("could not parse proxy url");
                 let path = url.path();
+
+                // Use tab: <	>
                 caddyfile.push_str(&format!(r"
-					rewrite {path}/ {path}
-					route {path} {{
-						uri strip_prefix {path}
-						reverse_proxy localhost:{port}
-					}}
-    			"));
+	rewrite {path}/ {path}
+	route {path} {{
+		uri strip_prefix {path}
+		reverse_proxy localhost:{port}
+	}}
+"));
             }
         }
 
         // Finally, add the dashboard
         caddyfile.push_str(&format!(r"
-        rewrite /admin/ admin
-        route /admin {{
-            uri strip_prefix /admin
-            reverse_proxy localhost:3000
-        }}
-        "));
+	rewrite /admin/ /admin
+	route /admin {{
+		uri strip_prefix /admin
+		reverse_proxy localhost:3000
+	}}
+"));
+
         caddyfile.push_str("}\n");
     }
-    
+    println!("{caddyfile}"); 
     let client = reqwest::blocking::Client::new();
-
+    
     let upload_response = client.post("http://localhost:2019/load")
         .header("Content-Type", "text/caddyfile")
         .body(caddyfile)
@@ -74,7 +77,7 @@ pub fn start() -> io::Result<()> {
         .text()
         .expect("i wanted text :(((");
 
-    println!("{upload_response}");
+    println!("caddyresponse: {upload_response}");
 
     Ok(())
 }
