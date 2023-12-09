@@ -4,14 +4,17 @@
 	import Pill from "$lib/components/Pill.svelte";
 	import Toggle from "$lib/components/Toggle.svelte";
 
-    export let data: any;
-	
+	export let data: any;
+
 	onMount(() => {
-        return setupWebSocket("services", (receivedData) => (data.payload = receivedData));
-    });
+		return setupWebSocket("services", (receivedData) => (data.payload = receivedData));
+	});
 
 	let gridChecked: boolean;
-    enum ViewType { List, Grid };
+	enum ViewType {
+		List,
+		Grid
+	}
 	$: vt = gridChecked ? ViewType.Grid : ViewType.List;
 </script>
 
@@ -30,12 +33,14 @@
 		<ul class="flex flex-col gap-4">
 			{#each data.payload as service}
 				{@const cfg = service.configuration}
-				{@const port = cfg.envs.find((env: [string, string]) => env[0] === "PORT")?.[1]}
+				{@const port = cfg.envs.find((env) => env[0] === "PORT")?.[1]}
 				<li class="{panelClass} w-full">
 					<div id="l1-info" class="flex gap-1">
 						<div class="flex gap-2">
 							<h2 class="text-xl">{cfg.name}</h2>
-							<Pill type={service.running ? "success" : "error"}>{service.running ? "Running" : "Stopped"}</Pill>
+							<Pill type={service.running ? "success" : "error"}
+								>{service.running ? "Running" : "Stopped"}</Pill
+							>
 						</div>
 						<Pill type="neutral">
 							🔄&nbsp;
@@ -44,7 +49,8 @@
 					</div>
 					{#if port}
 						<div class="flex items-center gap-2">
-							🌐 <p>{port}</p> → <a href="https://malted.dev/api">malted.dev/api/</a>
+							🌐 <p>{port}</p>
+							→<a href="https://malted.dev/api">malted.dev/api/</a>
 						</div>
 					{/if}
 				</li>
@@ -63,8 +69,8 @@
 	circle {
 		transition: fill-opacity 0.2s ease;
 		fill-opacity: 0.6;
-    }
-    circle.selected {
+	}
+	circle.selected {
 		fill-opacity: 1;
 	}
 </style>
