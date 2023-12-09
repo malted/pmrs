@@ -1,11 +1,7 @@
 import { json } from "@sveltejs/kit";
-import { page } from "$app/stores";
 
-let currentUrl: URL;
-let foo = page.subscribe(({ url }) => (currentUrl = url));
-
-export async function GET({ fetch }) {
-	console.log(currentUrl.href);
+export async function GET({ fetch, url }) {
+	console.log(url);
 
 	try {
 		return json({
