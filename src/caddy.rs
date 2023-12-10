@@ -46,7 +46,7 @@ pub fn start() -> io::Result<()> {
 
                 // Use tab: <	>
                 caddyfile.push_str(&format!(r"
-    rewrite {path} {path}/
+	rewrite {path} {path}/
 	handle_path {path}/ {{
 		reverse_proxy localhost:{port}
 	}}
@@ -56,14 +56,14 @@ pub fn start() -> io::Result<()> {
 
         // Finally, add the dashboard
         caddyfile.push_str(&format!(r#"
-    rewrite /admin /admin/
+	redir /admin /admin/ permanent
 	handle_path /admin/* {{
 		reverse_proxy localhost:3000
 	}}
 
 	handle {{
-        respond "Huh?" 404
-    }}
+		respond "Huh?" 404
+	}}
 }}
 "#));
     }
