@@ -58,7 +58,7 @@ pub fn start() -> io::Result<()> {
         // Finally, add the dashboard
         caddyfile.push_str(&format!(r"
 	rewrite /admin/ /admin
-	route /admin*  {{
+	route /admin/*  {{
 		uri strip_prefix /admin
 		reverse_proxy localhost:3000
 	}}
