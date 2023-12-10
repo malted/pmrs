@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { onMount } from "svelte";
 	import { panelClass } from "$lib/utils";
+	import { base } from "$app/paths";
 	import Pill from "$lib/components/Pill.svelte";
 	import Toggle from "$lib/components/Toggle.svelte";
 
@@ -8,7 +9,7 @@
 
 	onMount(() => {
 		const interval = setInterval(async () => {
-			const res = await fetch("/api/services");
+			const res = await fetch(`${base}/api/services`);
 			data.payload = await res.json();
 		}, 5_000);
 

@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { onMount } from "svelte";
+	import { base } from "$app/paths";
 	import ms from "ms";
 	import { padStartNbsp, panelClass } from "$lib/utils";
 	import Progress from "$lib/components/Progress.svelte";
@@ -8,7 +9,7 @@
 
 	onMount(() => {
 		const interval = setInterval(async () => {
-			const res = await fetch("/api/system");
+			const res = await fetch(`${base}/api/system`);
 			data = await res.json()
 		}, 5_000);
 
