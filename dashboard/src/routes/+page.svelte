@@ -1,7 +1,6 @@
 <script lang="ts">
 	import { onMount } from "svelte";
-	import { panelClass } from "$lib/utils";
-	import { base } from "$app/paths";
+	import { panelClass, base } from "$lib/utils";
 	import Pill from "$lib/components/Pill.svelte";
 	import Toggle from "$lib/components/Toggle.svelte";
 

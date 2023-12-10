@@ -4,6 +4,8 @@ export const padStartNbsp = (str: string, targetLength: number) =>
 export const panelClass =
 	"rounded-md ring-1 ring-zinc-200 dark:ring-zinc-700 w-fit p-1 bg-zinc-100 dark:bg-zinc-800";
 
+export const base = "/admin";
+
 // export function setupWebSocket(
 // 	sendMessage: string,
 // 	onDataReceived: (data: any) => void
