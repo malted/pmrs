@@ -1,13 +1,18 @@
 <script lang="ts">
 	import { onMount } from "svelte";
-	import { panelClass, setupWebSocket } from "$lib/utils";
+	import { panelClass } from "$lib/utils";
 	import Pill from "$lib/components/Pill.svelte";
 	import Toggle from "$lib/components/Toggle.svelte";
 
 	export let data: any;
 
 	onMount(() => {
-		return setupWebSocket("services", (receivedData) => (data.payload = receivedData));
+		const interval = setInterval(async () => {
+			const res = await fetch("/api/services");
+			data.payload = await res.json();
+		}, 5_000);
+
+		return () => clearInterval(interval);
 	});
 
 	let gridChecked: boolean;

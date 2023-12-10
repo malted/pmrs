@@ -1,13 +1,18 @@
 <script lang="ts">
 	import { onMount } from "svelte";
 	import ms from "ms";
-	import { padStartNbsp, panelClass, setupWebSocket } from "$lib/utils";
+	import { padStartNbsp, panelClass } from "$lib/utils";
 	import Progress from "$lib/components/Progress.svelte";
 
 	export let data: any;
 
 	onMount(() => {
-		return setupWebSocket("system", (receivedData) => (data.payload = receivedData));
+		const interval = setInterval(async () => {
+			const res = await fetch("/api/system");
+			data = await res.json()
+		}, 5_000);
+
+		return () => clearInterval(interval);
 	});
 
 	$: sys = data.payload;
