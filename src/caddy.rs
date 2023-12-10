@@ -46,9 +46,8 @@ pub fn start() -> io::Result<()> {
 
                 // Use tab: <	>
                 caddyfile.push_str(&format!(r"
-	rewrite {path}/ {path}
-	route {path} {{
-		uri strip_prefix {path}
+    rewrite {path} {path}/
+	handle_path {path}/ {{
 		reverse_proxy localhost:{port}
 	}}
 "));
@@ -56,18 +55,17 @@ pub fn start() -> io::Result<()> {
         }
 
         // Finally, add the dashboard
-        caddyfile.push_str(&format!(r"
-	rewrite /admin/ /admin
-	route /admin/* {{
-		uri strip_prefix /admin
+        caddyfile.push_str(&format!(r#"
+    rewrite /admin /admin/
+	handle_path /admin/* {{
 		reverse_proxy localhost:3000
 	}}
 
-	handle_errors {{
-		file_server
-	}}
+	handle {{
+        respond "Huh?" 404
+    }}
 }}
-"));
+"#));
     }
     println!("{caddyfile}"); 
     let client = reqwest::blocking::Client::new();
