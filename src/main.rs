@@ -95,7 +95,9 @@ fn start() -> io::Result<()> {
         .expect("Error setting Ctrl-C handler");
     }
 
-    loop {}
+    loop {
+		std::thread::sleep(std::time::Duration::from_millis(1_000));
+	}
 
     // let sock_listener = UnixListener::bind("/tmp/pmrs.sock2")?;
     // match sock_listener.accept() {
@@ -110,6 +112,8 @@ fn start() -> io::Result<()> {
     //     }
     //     Err(e) => println!("accept function failed: {:?}", e),
     // }
+
+	Ok(())
 }
 
 fn setup() -> std::io::Result<()> {
