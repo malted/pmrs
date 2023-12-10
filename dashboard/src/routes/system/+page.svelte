@@ -8,8 +8,7 @@
 
 	onMount(() => {
 		const interval = setInterval(async () => {
-			const res = await fetch(`${base}api/system`);
-			data = await res.json()
+			data = await fetch(`${base}api/system`).then((res) => res.json());
 		}, 5_000);
 
 		return () => clearInterval(interval);
